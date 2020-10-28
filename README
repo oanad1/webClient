@@ -1,0 +1,175 @@
+Diaconescu Oana 323 CD
+
+1. CONTENTS:
+    * client.c = the main program that runs the http client
+    * requests.c/requests.h = auxiliary functions for computing http GET, 
+      POST and DELETE requests
+    * helpers.c/helpers.h = auxiliary functions used to handle connections
+      and for parsing messages
+    * buffer.c/buffer.h = an interface for working with a buffer
+    * parson.c/parson.h = used for parsing json payload
+    * Makefile = compiles all sources into an executable named 'client';
+      ('make run' starts the main program )
+
+
+2. FUNCTIONALITY
+   * The program runs in a while loop which allows the user to input
+     commands until "exit"  is entered and the program closes
+   * A connection to the server is established everytime before processing
+     a command and closed after each command is finished 
+   * For each command, the server response is parsed in order to determine
+     its status code. Based on the satus code, the message is treated either 
+     as a success(in which  case any additional processing continues and the 
+     message is printed at stdout along a success message), either as an error
+     (in which case the error payload is printed to the user).
+
+   * The supported commands are: 
+     - register =
+           + prompts the user for a username and a pasword
+           + builds a JSON object based on the info received from stdin
+           + sends a POST request to the server
+
+     - login = 
+           + prompts the user for a username and a pasword
+           + builds a JSON object based on the info received from stdin
+           + sends a POST request to the server
+           + extracts the session cookies from the server response
+
+     - enter_library = 
+           + sends a GET request to the server using the session cookies 
+             obtained from login
+           + extracts a jwt token from the server response
+
+     - get_books = 
+           + sends a GET request to the server using the jwt_token
+           + parses the response from the server in order to display the books
+             in a pretty form (see parsing)
+
+     - get_book = 
+           + prompts the user for a book id
+           + check if the id is valid and builds an associated url
+           + sends a GET request to the server using the jwt token
+
+     - add_book = 
+           + prompts the user for a title, an author, a genre, the page count
+             and the publisher
+           + checks if the page count is a valid positive integer
+           + builds a JSON object based on the info received from stdin
+           + sends a POST request to the server using the JSON payload
+             and the jwt token for authentication
+
+     - delete_book = 
+           + prompts the user for a book id
+           + check if the id is valid and builds an associated url
+           + sends a DELETE request to the server using the jwt token
+
+     - logout = 
+           + sends a GET request to the server using the session cookies 
+             obtained from login
+           + deletes all session cookies and the jwt token
+
+     - exit = 
+           + exists the program
+
+
+3. REQUESTS 
+The structure of a GET request sent to the server:
+
+          GET ([query_params]) [url] HTTP/1.1
+          Host: [host]
+          (Authorization: Bearer [jwt_token])
+          (Cookie: [cookie_list]) 
+
+The structure of a POST request sent to the server:
+
+         POST [url] HTTP/1.1
+         Host: [host]
+         (Authorization: Bearer [jwt_token]) 
+         Content-Length: [payload_size]
+         Content-Type: [content_type]
+         (Cookie: [cookie_list]) 
+
+         {
+           "key1" = "value1" ...
+         }
+
+The structure of a DELETE request sent to the server:
+
+	 DELETE [url] HTTP/1.1
+         (Authorization: Bearer [jwt_token])
+         Content-Type: [content_type]
+         Host: [host]
+         (Cookie: [cookie_list])
+
+
+4. PARSING 
+   * The 'parson.h' library is used for parsing JSON payload more
+     conveniently
+   * The commands 'register', 'login' and 'add_books' make use of
+     parson library functions in order to build the json payload 
+     with the required infromation.
+
+   * In order to create the payload, the following steps are followed:
+     1. a JSON object is initialized by calling the functions 
+        json_value_init_object() and 
+        json_value_get_object().
+     2. Everytime a prompted value is read from stdin, the value is
+        added to the JSON object as a string, using the function
+        json_object_set_string(). (The only exception here is the
+        'page_count' field for the 'add_book' command; in this case, 
+        additional checks are performed in order to ensure that 
+        the inserted value is actually a valid integer).
+     3. The JSON object is converted to a string using the function
+        json_serialize_to_string_pretty() and added to the message.
+
+    * The parson library is also used for interpreting data received
+      from the server, more specifically as part of the 'get_book' and
+      'get_books' commands
+      1. The payload is extracted from the server response and
+         converted to a JSON Value
+      2. The function json_serialize_to_string_pretty() is called
+         on this JSON Value in order to generate a pretty output
+         for the book information
+
+     * Some additional functions are defined in "helpers.h" for:
+        - extracting the status code from a http response
+        - extracting and printing the error message for a http response
+        - extracting the payload from a http response 
+        - extracting the jwt token from a http respnse
+
+
+
+5. MENTIONS
+   * A user is not allowed to login twice. If the user is already logged
+     in and tries to login again, the program will print an error message
+     suggesting that succesive logins without logouts are not allowed. This
+     is verified inside the client directly by checking if any session 
+     cookies have been previously set.
+   * A user is not allowed to enter the library twice. If the user already
+     has access to the library, a relevant error message will be printed.
+     This is also verified inside the client directly by checking if a jwt
+     token has been previously set.
+   * When the user logs out, the jwt token and all session cookies will be 
+     erased; thus, the user loses access to the library until another login
+   * A user is not allowed to send requests to the library if he doesn't have
+     access to the library. The program checks if a jwt_token has been set
+     before performing any of the commands 'get_books', 'get_book', 'add_book' 
+     or 'delete_book'. In case of a non-existing token, the user is prompted
+     to enter the library before sending any more commands.
+   * In the case of the 'get_book' and 'delete_book' commands, the id
+     received from stdin is checked in order to make sure that we don't
+     send a bad url to the server. The id should be a positive integer. 
+     In case it is not, an error message is displayed to the user. 
+   * Same goes for the page_count field of the 'add_book' command. Its
+     validity is checked from inside the client in order to avoid bad 
+     requests to the server.
+   * Any other error casses are handled by sending the information to the
+     server as recived from stdin and waiting for an error message which is
+     then proccesed and displayed to the user
+
+
+
+
+
+
+
